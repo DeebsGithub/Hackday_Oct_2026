@@ -22,6 +22,7 @@
   const form = $('flight-form');
   const disabled = new Set();
   let current = null;
+  let dbRate = null;  // route's delayed-or-cancelled share from load_rows.load_database(); null until the backend answers
 
   // Route-level checks: no carrier, flight number or time. MID band keeps the
   // hour multiplier neutral, and score.js falls back to a typical airline.
@@ -240,16 +241,15 @@
       btn.disabled = false;
       btn.textContent = 'Check my route';
     }
-    // Fire-and-forget: run load_rows.load_database() for this route on submit.
-    // The result appears as the "Delayed or cancelled · history" stat once
-    // Snowflake answers; if the backend is down it stays hidden.
+    // Ask the backend to run load_rows.load_database() for this route. When it
+    // answers, the hero answer switches from the model's cancel-only chance to
+    // the historical delayed-or-cancelled rate for this route.
+    dbRate = null;
     if (window.FPLive) {
       window.FPLive.database(f.origin, f.dest, f.date).then((r) => {
-        const stat = $('r-db-stat');
-        if (r && stat) {
-          $('r-db').textContent = fmtPct(r.delayed_or_cancelled);
-          stat.hidden = false;
-        }
+        if (!r || current !== f) return;  // stale reply for an earlier route
+        dbRate = r.delayed_or_cancelled;
+        render();
       });
     }
     current = f;
@@ -287,7 +287,8 @@
     const parts = [
       'A flight from', chip(`<i class="pin"></i>${o.city} <em>${o.code}</em>`),
       'to', chip(`<i class="pin"></i>${d.city} <em>${d.code}</em>`),
-      'on', chip(day), 'has a', chip(fmtPct(r.total), 'ink'), 'chance of being cancelled.',
+      'on', chip(day), 'has a', chip(fmtPct(dbRate != null ? dbRate : r.total), 'ink'),
+      dbRate != null ? 'chance of being delayed or cancelled.' : 'chance of being cancelled.',
       ...compare,
       chip(`<i class="sw-dot s${top.slot}"></i>${top.name.toLowerCase()}`),
       mover ? 'risk, pushed up by a market at' : 'risk.',
@@ -316,10 +317,16 @@
     const v = verdict(r);
     $('r-verdict').className = 'verdict ' + v.cls;
     $('r-verdict').innerHTML = `<span aria-hidden="true">${v.icon}</span> ${v.text}`;
-    const big = r.total * 100;
+    // Hero answer: the delayed-or-cancelled rate once load_database answers,
+    // the model's cancel-only chance until then (or if the backend is down).
+    const heroRate = dbRate != null ? dbRate : r.total;
+    const big = heroRate * 100;
     const digits = big < 1 ? 2 : 1;
     if (opts.fresh) countUp($('r-p'), big, digits);
     else $('r-p').textContent = big.toFixed(digits);
+    $('r-caption').textContent = dbRate != null
+      ? 'chance a flight on this route is delayed or cancelled'
+      : 'chance a flight on this route is cancelled';
     $('r-base').textContent = fmtPct(r.baseTotal);
     $('r-ci').textContent = `${fmtPct(r.lo)} – ${fmtPct(r.hi)}`;
     $('r-exp').textContent = fmtMoney(r.total * money);
