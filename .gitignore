@@ -1,0 +1,23 @@
+# Backend stays local
+backend/
+
+# Secrets and local config
+.env
+.env.*
+*.p8
+*.pem
+connections.toml
+config.toml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials files
+keys.txt
+*keys*.txt
