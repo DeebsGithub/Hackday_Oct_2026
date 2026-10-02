@@ -240,6 +240,8 @@
       btn.disabled = false;
       btn.textContent = 'Check my route';
     }
+    // Fire-and-forget: run load_rows.load_database() for this route on submit
+    if (window.FPLive) window.FPLive.database(f.origin, f.dest, f.date);
     current = f;
     disabled.clear();
     $('results').hidden = false;

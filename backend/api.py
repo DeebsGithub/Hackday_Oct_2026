@@ -10,6 +10,8 @@ Endpoints (all GET, JSON, CORS open — the frontend is a static page):
                    ?carrier&flight&origin&dest&date&time
   /api/route    -> {flights, markets}                             schedule + route rates
                    ?origin&dest&date
+  /api/database -> {ok, origin, dest, date, delayed_or_cancelled}
+                   ?origin&dest&date            load_rows.load_database() on submit
 
 Markets are applied client-side (score.js), so /api/score returns historical
 base rates per cause plus the markets that match the flight, and the frontend
@@ -52,6 +54,15 @@ try:
     from snowflake import connector as sf_connector
 except ImportError:
     sf_connector = None
+
+# load_rows.py sits at the repo root (one level above backend/); it brings its
+# own Snowflake connection and needs snowflake-connector-python + python-dotenv.
+sys.path.insert(0, str(ROOT))
+try:
+    from load_rows import FlightRequest, load_database
+except Exception as _e:  # optional: /api/database answers 503 without it
+    FlightRequest, load_database = None, None
+    print(f"[warn] load_rows.load_database unavailable: {_e}", file=sys.stderr)
 
 HOST = os.environ.get("HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "8787"))
@@ -631,6 +642,40 @@ def call_store(method, *args):
 
 
 # ---------------------------------------------------------------------------
+# load_rows bridge: /api/database -> load_rows.load_database()
+# ---------------------------------------------------------------------------
+
+_DB_CACHE = {}  # (origin, dest, date) -> rate
+
+
+def database_rate(origin, dest, date_str):
+    """Share of legs on the route delayed-or-cancelled, via load_rows.load_database.
+
+    load_database() interpolates its params straight into SQL, so only values
+    that passed the param() regexes (3-letter airports, ISO date) ever reach
+    it. It opens a fresh Snowflake connection per call, so results are cached
+    per route+date.
+    """
+    if load_database is None:
+        raise HttpError(503, "load_rows unavailable (needs snowflake-connector-python and python-dotenv)")
+    key = (origin, dest, date_str)
+    if key not in _DB_CACHE:
+        try:
+            request = FlightRequest(
+                departing_airport=origin,
+                arriving_airport=dest,
+                departure_date=date.fromisoformat(date_str),
+            )
+            _DB_CACHE[key] = load_database(request)
+        except Exception as e:
+            if "No data found" in str(e):
+                raise HttpError(404, f"no flights for {origin}->{dest} in the database")
+            traceback.print_exc()
+            raise HttpError(502, f"load_database failed: {type(e).__name__}: {e}")
+    return _DB_CACHE[key]
+
+
+# ---------------------------------------------------------------------------
 # HTTP server
 # ---------------------------------------------------------------------------
 
@@ -716,6 +761,14 @@ def main():
                     param(query, "date", RE_DATE, "2026-12-14"),
                 )
                 return call_store("route", *args)
+            if path == "/api/database":
+                args = (
+                    param(query, "origin", RE_AIRPORT, "PHX"),
+                    param(query, "dest", RE_AIRPORT, "LAX"),
+                    param(query, "date", RE_DATE, "2026-10-04"),
+                )
+                return {"ok": True, "origin": args[0], "dest": args[1], "date": args[2],
+                        "delayed_or_cancelled": database_rate(*args)}
             raise HttpError(404, f"no such endpoint: {path}")
 
         def log_message(self, *args):  # quieten the default stderr spam

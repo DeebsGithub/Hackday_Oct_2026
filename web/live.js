@@ -98,6 +98,21 @@
       }
     },
 
+    // Run load_rows.load_database() on the backend for this route. Called when
+    // the user submits the form. Not gated on Live.on so a submit always tries
+    // the backend; when api.py isn't running this just fails quietly.
+    async database(o, d, date) {
+      if (!o || !d || !date) return null;
+      try {
+        const r = await get('/api/database', { origin: o, dest: d, date }, 30000);
+        console.info(`load_database ${r.origin}→${r.dest}: ${(r.delayed_or_cancelled * 100).toFixed(1)}% delayed or cancelled`);
+        return r;
+      } catch (e) {
+        console.warn('load_database request failed', e);
+        return null;
+      }
+    },
+
     // Synchronous lookups for score.js and the flight picker
     lookup(f) {
       if (!Live.on || !f) return null;

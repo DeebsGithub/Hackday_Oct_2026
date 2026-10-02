@@ -22,6 +22,7 @@ either way (badge shows which).
 | `GET /api/markets` | prediction markets (rows consumed by `toMarket` in `web/live.js`) |
 | `GET /api/score?carrier&flight&origin&dest&date&time` | per-cause base rates + 90% intervals, matching markets |
 | `GET /api/route?origin&dest&date` | flights + per-carrier base rates + matching markets |
+| `GET /api/database?origin&dest&date` | `load_rows.load_database()` — share of route legs delayed or cancelled (called on form submit) |
 
 Design notes: `docs/design/cancellation-probability-pipeline.md`. Markets are
 applied client-side (`web/score.js`) so toggling one never needs another round

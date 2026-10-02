@@ -18,18 +18,6 @@ def is_delayed_or_canceled(row):
     return row[1] or row[0] > 0
 
 
-def get_weather_data(conn, date) -> None | list:
-    sql_req = f"""
-    SELECT
-    GATE_DEPARTURE_DELAY,
-    IS_CANCELLED,
-    SCHEDULED_GATE_DEPARTURE_LOCAL,
-    FROM FLIGHTS
-    WHERE DEPARTURE_AIRPORT_ID = '{request.departing_airport}'
-    AND ARRIVAL_AIRPORT_ID = '{request.arriving_airport}';
-    """
-
-
 def load_database(request: FlightRequest):
     conn = connector.connect(
         account=os.environ['SNOWFLAKE_ACCOUNT'],
@@ -63,7 +51,9 @@ def load_database(request: FlightRequest):
     base_percent_delayed_or_canceled = \
         sum(1 for row in rows if is_delayed_or_canceled(row)) / len(rows)
 
-    print(base_percent_delayed_or_canceled)
+    print(f"{base_percent_delayed_or_canceled=}")
+
+    return base_percent_delayed_or_canceled
 
 
 if __name__ == "__main__":
