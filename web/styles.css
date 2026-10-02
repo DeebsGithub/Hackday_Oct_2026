@@ -237,6 +237,7 @@ body.has-results .nav-flight:not([hidden]) { animation: drop .5s cubic-bezier(.2
 
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-top: 28px; }
 .stat { display: grid; gap: 4px; align-content: start; font-size: 13px; }
+.stat[hidden] { display: none; }
 .stat b { font-size: clamp(20px, 1.8vw, 26px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .money { display: flex; align-items: center; gap: 4px; height: 38px; padding: 0 12px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--page); font: 600 18px var(--sans); }
 .money input { width: 100%; border: 0; padding: 0; background: transparent; outline: none; font: inherit; color: inherit; }

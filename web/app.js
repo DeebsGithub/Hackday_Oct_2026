@@ -240,8 +240,18 @@
       btn.disabled = false;
       btn.textContent = 'Check my route';
     }
-    // Fire-and-forget: run load_rows.load_database() for this route on submit
-    if (window.FPLive) window.FPLive.database(f.origin, f.dest, f.date);
+    // Fire-and-forget: run load_rows.load_database() for this route on submit.
+    // The result appears as the "Delayed or cancelled · history" stat once
+    // Snowflake answers; if the backend is down it stays hidden.
+    if (window.FPLive) {
+      window.FPLive.database(f.origin, f.dest, f.date).then((r) => {
+        const stat = $('r-db-stat');
+        if (r && stat) {
+          $('r-db').textContent = fmtPct(r.delayed_or_cancelled);
+          stat.hidden = false;
+        }
+      });
+    }
     current = f;
     disabled.clear();
     $('results').hidden = false;
