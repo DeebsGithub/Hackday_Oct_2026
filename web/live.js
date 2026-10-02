@@ -1,141 +1,70 @@
-// Live data from the local Snowflake API (backend/api.py). When it isn't running, everything
-// falls back to the sample model in score.js and the page works the same.
-
+// API client. The frontend has no local or sample data path.
 (function () {
   const D = window.FP_DATA;
-  const BASE = 'http://localhost:8787';
-  const scores = new Map();   // flight key -> live score
-  const routes = new Map();   // route key -> { flights, markets }
-  const pending = new Map();
+  const BASE = window.FP_API_BASE || 'http://localhost:8787';
 
-  const flightKey = (f) => [f.carrier, f.flight, f.origin, f.dest, f.date].join('|').toUpperCase();
-  const routeKey = (o, d, date) => [o, d, date].join('|').toUpperCase();
-  const fmtWindow = (a, b) => {
-    const o = { month: 'short', day: 'numeric' };
-    const s = new Date(a + 'T12:00:00').toLocaleDateString('en-US', o);
-    const e = new Date(b + 'T12:00:00').toLocaleDateString('en-US', o);
-    return a === b ? s : `${s} – ${e}`;
-  };
-
-  async function get(path, params, ms = 20000) {
+  async function get(path, params = {}, timeout = 30000) {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), ms);
+    const timer = setTimeout(() => ctl.abort(), timeout);
     try {
-      const res = await fetch(`${BASE}${path}?${new URLSearchParams(params)}`, { signal: ctl.signal });
-      if (!res.ok) throw new Error((await res.json()).error || res.status);
-      return await res.json();
+      const query = new URLSearchParams(params);
+      const response = await fetch(`${BASE}${path}${query.size ? `?${query}` : ''}`, { signal: ctl.signal });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || `API returned ${response.status}`);
+      return body;
     } finally {
       clearTimeout(timer);
     }
   }
 
-  // API market rows into the same shape as the sample markets
-  function toMarket(m) {
-    const short = m.title.replace(/\?.*$/, '').replace(/^Will (a |the )?/, '').replace(/ by [A-Z][a-z]+ \d+, \d{4}$/, '');
-    return {
-      id: m.market_id, title: m.title.replace(/\?$/, ''), short: short.slice(0, 28), venue: m.venue === 'kalshi' ? 'Kalshi' : 'Polymarket',
-      cause: m.cause, q: m.q_market, dayShare: m.q_market ? m.q / m.q_market : 1, qHist: m.q_hist, lift: m.lift,
-      liquidity: m.liquidity || 0, volume: 0,
-      dates: [m.window_start, m.window_end], window: fmtWindow(m.window_start, m.window_end),
-      scope: m.scope_type === 'national' ? { national: true } : { airports: String(m.scope_value).split(' '), label: m.scope_value },
-      history: m.history, live: true,
-    };
-  }
-
   const Live = {
     on: false,
     info: null,
+    error: null,
+    catalogReady: false,
+    catalogError: null,
 
     async init() {
       try {
-        Live.info = await get('/api/health', {}, 2500);
-        Live.on = !!Live.info.ok;
-      } catch {
+        const catalog = await get('/api/catalog', {}, 5000);
+        if (!Array.isArray(catalog.airports) || !catalog.airports.length) {
+          throw new Error('The airport catalog is unavailable.');
+        }
+        D.airports.splice(0, D.airports.length, ...catalog.airports);
+        Live.catalogReady = true;
+      } catch (error) {
+        Live.catalogError = error;
+        Live.error = error;
+      }
+      window.dispatchEvent(new CustomEvent('fp-catalog', {
+        detail: { ok: Live.catalogReady, error: Live.catalogError && Live.catalogError.message },
+      }));
+      try {
+        const health = await get('/api/health', {}, 5000);
+        Live.info = health;
+        Live.on = health.ok === true;
+      } catch (error) {
+        Live.error = error;
         Live.on = false;
       }
-      if (Live.on) {
-        try {
-          const { markets } = await get('/api/markets', {});
-          D.markets = markets.map(toMarket);
-          D.minLiquidity = 0;
-        } catch { /* keep sample markets */ }
-      }
-      window.dispatchEvent(new CustomEvent('fp-live', { detail: { on: Live.on, info: Live.info } }));
+      window.dispatchEvent(new CustomEvent('fp-live', {
+        detail: { on: Live.on, info: Live.info, error: Live.error && Live.error.message },
+      }));
     },
 
-    // Fetch the flight and its route; resolves even on failure so the page can fall back
-    async prefetch(f) {
-      if (!Live.on) return false;
-      const fk = flightKey(f);
-      if (scores.has(fk)) return true;
-      if (pending.has(fk)) return pending.get(fk);
-      const job = Promise.all([
-        get('/api/score', { carrier: f.carrier, flight: f.flight, origin: f.origin, dest: f.dest, date: f.date, time: f.time }),
-        Live.route(f.origin, f.dest, f.date),
-      ]).then(([s]) => {
-        scores.set(fk, { ...s, markets: s.markets.map(toMarket) });
-        return true;
-      }).catch((e) => {
-        console.warn('Live score failed, using sample model', e);
-        return false;
-      }).finally(() => pending.delete(fk));
-      pending.set(fk, job);
-      return job;
-    },
-
-    async route(o, d, date) {
-      if (!Live.on || !o || !d || !date) return null;
-      const rk = routeKey(o, d, date);
-      if (routes.has(rk)) return routes.get(rk);
+    async database(origin, dest, date) {
+      if (!Live.on || !origin || !dest || !date) return null;
       try {
-        const r = await get('/api/route', { origin: o, dest: d, date });
-        const value = { flights: r.flights, markets: r.markets.map(toMarket) };
-        routes.set(rk, value);
-        return value;
-      } catch (e) {
-        console.warn('Live route failed', e);
+        return await get('/api/database', { origin, dest, date });
+      } catch (error) {
+        Live.error = error;
         return null;
       }
     },
 
-    // Run load_rows.load_database() on the backend for this route. Called when
-    // the user submits the form. Not gated on Live.on so a submit always tries
-    // the backend; when api.py isn't running this just fails quietly.
-    async database(o, d, date) {
-      if (!o || !d || !date) return null;
-      try {
-        const r = await get('/api/database', { origin: o, dest: d, date }, 30000);
-        console.info(`load_database ${r.origin}→${r.dest}: ${(r.delayed_or_cancelled * 100).toFixed(1)}% delayed or cancelled`);
-        return r;
-      } catch (e) {
-        console.warn('load_database request failed', e);
-        return null;
-      }
-    },
-
-    // Synchronous lookups for score.js and the flight picker
-    lookup(f) {
-      if (!Live.on || !f) return null;
-      const s = scores.get(flightKey(f));
-      if (s) return s;
-      const r = routes.get(routeKey(f.origin, f.dest, f.date));
-      if (!r) return null;
-      // A flight we only know from its route: base rates without per-cause intervals
-      const hit = f.carrier && r.flights.find((x) => x.carrier === f.carrier && x.flight === String(f.flight));
-      // Route-level checks (no carrier/flight): average across the route's flights
-      const rows = hit ? [hit] : (f.carrier ? [] : r.flights);
-      if (!rows.length) return null;
-      const avg = (fn) => rows.reduce((a, x) => a + fn(x), 0) / rows.length;
-      return {
-        causes: D.causes.map((c) => ({ cause: c.code, base: avg((x) => x.rates[c.code] || 0), lo: null, hi: null, level: 'route' })),
-        total: null,
-        markets: r.markets.filter((m) => !(m.scope && m.scope.carrier)),
-      };
-    },
-    routeFlights(o, d, date) {
-      const r = routes.get(routeKey(o, d, date));
-      return r ? r.flights : null;
-    },
+    lookup() { return null; },
+    route() { return Promise.resolve(null); },
+    routeFlights() { return null; },
   };
 
   window.FPLive = Live;

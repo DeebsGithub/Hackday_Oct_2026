@@ -10,21 +10,16 @@ python backend/api.py                 # API on http://localhost:8787
 python -m http.server -d web 8000     # frontend on http://localhost:8000
 ```
 
-Copy `envexample` to `.env` and fill in the `SNOWFLAKE_*` values. With valid
-credentials the API serves Snowflake data (Cirium OTP view
-`CIRIUM_FLIGHT_DATA.PUBLIC.FLIGHTS`); without them — or if Snowflake errors — it
-falls back to the sample model ported from `web/data.js`, and the frontend works
-either way (badge shows which).
+Copy `envexample` to `.env` and fill in the `SNOWFLAKE_*` values. Submitted
+routes use `CIRIUM_FLIGHT_DATA.PUBLIC.FLIGHTS` through `/api/database`; the
+frontend displays that response directly. If Snowflake is unavailable, the
+route form shows an error and does not substitute sample/model data.
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/health` | `{ok, mode, data_through, markets}` |
-| `GET /api/markets` | prediction markets (rows consumed by `toMarket` in `web/live.js`) |
-| `GET /api/score?carrier&flight&origin&dest&date&time` | per-cause base rates + 90% intervals, matching markets |
-| `GET /api/route?origin&dest&date` | flights + per-carrier base rates + matching markets |
-| `GET /api/database?origin&dest&date` | `load_rows.load_database()` — share of route legs delayed or cancelled (called on form submit) |
+| `GET /api/health` | backend readiness (`{ok, mode}`) |
+| `GET /api/catalog` | airport metadata used by the route form |
+| `GET /api/database?origin&dest&date` | `load_rows.load_database()` — share of route legs delayed or cancelled, displayed directly on submit |
 
-Design notes: `docs/design/cancellation-probability-pipeline.md`. Markets are
-applied client-side (`web/score.js`) so toggling one never needs another round
-trip. Cirium has no cancellation-cause codes, so the Snowflake store splits the
-overall rate across causes by the global mix until BTS causes are loaded.
+There is no browser-side scoring model or generated fallback. Backend failures
+are shown as errors instead of being replaced with sample values.

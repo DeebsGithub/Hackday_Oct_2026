@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FlightPredictor</title>
-  <meta name="description" content="Calibrated cancellation odds for any US domestic flight, split by cause and moved by live weather markets.">
+  <meta name="description" content="Historical delayed-or-cancelled rates for US domestic routes, displayed directly from Snowflake.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -19,7 +19,6 @@
     <p class="nav-flight" hidden><span class="kicker">Your route</span> <b id="r-flight"></b></p>
     <div class="nav-actions">
       <span class="data-badge" id="data-badge" hidden></span>
-      <a class="btn btn-ghost btn-sm" href="game.html">Daily game</a>
       <a class="btn btn-dark btn-sm" href="#top" id="nav-new" hidden>Edit route</a>
     </div>
   </header>
@@ -35,9 +34,9 @@
         <p class="stage-hint">Grab a plane and swing it</p>
       </div>
 
-      <h1>Will my flight get cancelled?</h1>
+      <h1>Will my flight be delayed or cancelled?</h1>
       <div class="hero-copy">
-        <p class="lede">Enter your route to get the odds, what's driving them, and how they're moving with live weather markets.</p>
+        <p class="lede">Enter your route to display its historical delayed-or-cancelled rate from Snowflake.</p>
 
         <form class="card ask" id="flight-form" autocomplete="off" novalidate>
           <div class="field-row">
@@ -63,12 +62,6 @@
           </div>
           <p class="form-error" id="f-error" role="alert" hidden></p>
           <button class="btn btn-dark btn-block" type="submit">Check my route</button>
-          <div class="examples">
-            <span class="muted small">Or try one:</span>
-            <button type="button" class="chip" data-example="ord-snow">ORD → LGA · snow</button>
-            <button type="button" class="chip" data-example="den-wind">DEN → DFW · wind</button>
-            <button type="button" class="chip" data-example="fl-storm">MIA → ATL · storm</button>
-          </div>
         </form>
       </div>
     </section>
@@ -84,9 +77,9 @@
           <div class="answer-num reveal">
             <p class="verdict" id="r-verdict"></p>
             <div class="hero-num"><span id="r-p"></span><small>%</small></div>
-            <p class="soft">chance a flight on this route is cancelled</p>
+            <p class="soft" id="r-p-label">historical flights on this route delayed or cancelled</p>
           </div>
-          <div class="answer-meta reveal">
+          <div class="answer-meta reveal" id="r-model-meta" hidden>
             <div class="ci" aria-hidden="true">
               <div class="ci-track"><div class="ci-band" id="r-ci-band"></div><div class="ci-mark ci-base" id="r-ci-base"></div><div class="ci-mark" id="r-ci-mark"></div></div>
               <div class="ci-axis"><span>0%</span><span class="ci-key"><i class="k-band"></i>90% range <i class="k-base"></i>typical</span><span id="r-ci-max"></span></div>
@@ -106,7 +99,7 @@
       </section>
 
       <!-- Every outcome, numbered cards -->
-      <section class="r-causes" id="outcomes" aria-labelledby="r-causes-title">
+      <section class="r-causes" id="outcomes" aria-labelledby="r-causes-title" hidden>
         <div class="r-head reveal">
           <p class="kicker">By cause</p>
           <h2 id="r-causes-title">Five ways it can go.</h2>
@@ -118,7 +111,7 @@
       </section>
 
       <!-- Live markets -->
-      <section class="panel dark r-movers" aria-labelledby="r-movers-title">
+      <section class="panel dark r-movers" id="r-movers" aria-labelledby="r-movers-title" hidden>
         <div class="r-head reveal">
           <p class="kicker">Live markets</p>
           <h2 id="r-movers-title">What's moving your odds.</h2>
@@ -128,7 +121,7 @@
       </section>
 
       <!-- Trip Watch timeline -->
-      <section class="r-watch" id="watch" aria-labelledby="r-watch-title">
+      <section class="r-watch" id="watch" aria-labelledby="r-watch-title" hidden>
         <div class="r-head reveal">
           <p class="kicker">Trip Watch</p>
           <h2 id="r-watch-title">Scrub the last two weeks.</h2>
@@ -153,13 +146,13 @@
       </section>
 
       <!-- Other markets, as a gallery -->
-      <section class="r-gallery" id="markets" aria-labelledby="r-gallery-title">
+      <section class="r-gallery" id="markets" aria-labelledby="r-gallery-title" hidden>
         <div class="r-head reveal">
           <p class="kicker">Weather markets</p>
           <h2 id="r-gallery-title">Other markets we're watching.</h2>
         </div>
         <div class="market-rail" id="market-grid"></div>
-        <p class="fine">Sample data for the prototype. Markets below the liquidity floor are hidden; prices are smoothed over 6 hours.</p>
+        <p class="fine">Market data appears only when returned by the backend.</p>
       </section>
     </div>
   </main>
@@ -167,16 +160,14 @@
   <footer class="footer">
     <div class="footer-big">Fly informed.</div>
     <div class="footer-cols">
-      <div><b>Data</b><span>BTS on-time performance</span><span>NOAA weather</span><span>Prediction markets</span></div>
-      <div><b>Model</b><span>v1 · empirical Bayes</span><span>Prototype, sample data</span></div>
+      <div><b>Data</b><span>Snowflake route records</span></div>
+      <div><b>Display</b><span>Database result shown directly</span></div>
     </div>
   </footer>
 
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="airports.js"></script>
   <script src="data.js"></script>
-  <script src="score.js"></script>
   <script src="live.js"></script>
   <script src="plane.js"></script>
   <script src="app.js"></script>
