@@ -11,9 +11,9 @@ def load_database():
         user=os.environ['SNOWFLAKE_USER'],
         password=os.environ['SNOWFLAKE_PASSWORD'],
         role=os.environ["SNOWFLAKE_ROLE"],
-        warehouse="SNOWFLAKE_LEARNING_WH",
-        database="CIRIUM_FLIGHT_DATA",
-        schema="PUBLIC",
+        warehouse=os.environ["SNOWFLAKE_WAREHOUSE"],
+        database=os.environ["SNOWFLAKE_DATABASE"],
+        schema=os.environ["SNOWFLAKE_SCHEMA"],
     )
 
     cur = conn.cursor()
