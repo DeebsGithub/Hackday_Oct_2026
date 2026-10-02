@@ -103,12 +103,16 @@
       if (!Live.on || !f) return null;
       const s = scores.get(flightKey(f));
       if (s) return s;
-      // A flight we only know from its route: base rates without per-cause intervals
       const r = routes.get(routeKey(f.origin, f.dest, f.date));
-      const hit = r && r.flights.find((x) => x.carrier === f.carrier && x.flight === String(f.flight));
-      if (!hit) return null;
+      if (!r) return null;
+      // A flight we only know from its route: base rates without per-cause intervals
+      const hit = f.carrier && r.flights.find((x) => x.carrier === f.carrier && x.flight === String(f.flight));
+      // Route-level checks (no carrier/flight): average across the route's flights
+      const rows = hit ? [hit] : (f.carrier ? [] : r.flights);
+      if (!rows.length) return null;
+      const avg = (fn) => rows.reduce((a, x) => a + fn(x), 0) / rows.length;
       return {
-        causes: D.causes.map((c) => ({ cause: c.code, base: hit.rates[c.code], lo: null, hi: null, level: 'route' })),
+        causes: D.causes.map((c) => ({ cause: c.code, base: avg((x) => x.rates[c.code] || 0), lo: null, hi: null, level: 'route' })),
         total: null,
         markets: r.markets.filter((m) => !(m.scope && m.scope.carrier)),
       };

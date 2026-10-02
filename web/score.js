@@ -102,7 +102,8 @@
   function score(input, opts = {}) {
     const live = window.FPLive && window.FPLive.lookup(input);
     if (live) return liveScore(input, live, opts);
-    const carrier = byCode(D.carriers, input.carrier);
+    // Route-level checks pass no carrier: score a typical airline (all multipliers 1)
+    const carrier = byCode(D.carriers, input.carrier) || { code: '··', name: 'Typical', mult: { A: 1, B: 1, C: 1, D: 1 }, volume: 0.5 };
     const origin = byCode(D.airports, input.origin);
     const dest = byCode(D.airports, input.dest);
     const month = Number(input.date.slice(5, 7));

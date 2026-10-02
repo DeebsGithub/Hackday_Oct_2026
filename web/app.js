@@ -23,7 +23,11 @@
   const disabled = new Set();
   let current = null;
 
-  // ---------- type-ahead search for airline, origin and destination ----------
+  // Route-level checks: no carrier, flight number or time. MID band keeps the
+  // hour multiplier neutral, and score.js falls back to a typical airline.
+  const TYPICAL = { carrier: '', flight: '', time: '12:00' };
+
+  // ---------- type-ahead search for origin and destination ----------
   const airportLabel = (a) => `${a.city}, ${a.state} (${a.code})`;
   const esc = (s) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
@@ -48,89 +52,12 @@
       .map((x) => x.a);
   }
 
-  function searchCarriers(text, limit = 8) {
-    const t = text.trim().toLowerCase();
-    if (!t) return D.carriers.slice(0, limit);
-    const rank = (c) => {
-      const code = c.code.toLowerCase(), name = c.name.toLowerCase();
-      if (code === t) return 0;
-      if (name.startsWith(t)) return 1;
-      if (code.startsWith(t)) return 2;
-      if (name.includes(t)) return 3;
-      return 99;
-    };
-    return D.carriers.map((c) => ({ c, r: rank(c) })).filter((x) => x.r < 99).sort((x, y) => x.r - y.r).slice(0, limit).map((x) => x.c);
-  }
-
-  // Sample schedule: which carriers fly a route, how often, and when. Production reads this from STG.FLIGHTS.
-  const toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-  const toTime = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-  const fmtTime = (t) => new Date(`2000-01-01T${t}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const hash = window.FP.hash;
-
-  function scheduleFor(carrierCode, o, d, date = $('f-date').value) {
-    if (!o || !d || o === d) return [];
-    // Real flights from BTS when the live API has this route
-    const real = window.FPLive && window.FPLive.routeFlights(o, d, date);
-    if (real) {
-      return real
-        .filter((x) => !carrierCode || x.carrier === carrierCode)
-        .map((x) => ({ code: x.flight, carrier: x.carrier, carrierName: (byCode(D.carriers, x.carrier) || { name: x.carrier }).name, time: x.time }));
-    }
-    const oa = byCode(D.airports, o), da = byCode(D.airports, d);
-    const carriers = carrierCode ? [byCode(D.carriers, carrierCode)] : D.carriers;
-    const out = [];
-    carriers.forEach((c) => {
-      const key = `${c.code}-${o}-${d}`;
-      // Bigger airports and bigger airlines mean more routes and more daily departures
-      const reach = Math.min(0.95, 0.12 + 0.18 * (oa.hub + da.hub) * c.volume);
-      if (!carrierCode && hash(key + 'serves') > reach) return;
-      const n = Math.max(1, Math.round((0.6 + oa.hub + da.hub) * c.volume * (0.6 + hash(key + 'freq'))));
-      const first = 360 + Math.round(hash(key + 'first') * 60);
-      const gap = Math.floor((1290 - first) / Math.max(n, 1));
-      for (let i = 0; i < n; i++) {
-        const dep = Math.round((first + i * gap + hash(key + i) * Math.min(gap, 60) * 0.6) / 5) * 5;
-        const num = String(Math.floor(100 + hash(key + 'no' + i) * (c.code.length === 2 && /\d/.test(c.code) ? 5800 : 2800)));
-        out.push({ code: num, carrier: c.code, carrierName: c.name, time: toTime(dep) });
-      }
-    });
-    return out;
-  }
-
   const SOURCES = {
     airport: {
       search: searchAirports,
       find: (code) => byCode(D.airports, code),
       label: airportLabel,
       row: (a) => `<b>${a.code}</b><span>${esc(a.city)}, ${a.state}<small>${esc(a.name)}</small></span>`,
-    },
-    flight: {
-      // Flights on the chosen route, closest to the chosen departure time first
-      search: (text, limit = 8) => {
-        const want = toMin($('f-time').value || '09:00');
-        const t = text.replace(/\D/g, '');
-        return scheduleFor(combos.carrier.resolve(), combos.origin.resolve(), combos.dest.resolve())
-          .filter((f) => !t || f.code.startsWith(t))
-          .sort((a, b) => Math.abs(toMin(a.time) - want) - Math.abs(toMin(b.time) - want))
-          .slice(0, limit);
-      },
-      find: (code) => (code ? { code: String(code).replace(/\D/g, '').slice(0, 4) } : null),
-      label: (f) => f.code,
-      row: (f) => `<b>${f.carrier} ${f.code}</b><span>${fmtTime(f.time)}<small>${esc(f.carrierName)} · ${combos.origin.resolve()} → ${combos.dest.resolve()}</small></span>`,
-      hint: () => (!combos.origin.resolve() || !combos.dest.resolve()
-        ? 'Pick From and To to see flights on your route.'
-        : 'No matching flights on this route. You can still type your number.'),
-      free: true,
-      onChoose: (f) => {
-        combos.carrier.set(f.carrier);
-        $('f-time').value = f.time;
-      },
-    },
-    carrier: {
-      search: searchCarriers,
-      find: (code) => byCode(D.carriers, code),
-      label: (c) => `${c.name} (${c.code})`,
-      row: (c) => `<b>${c.code}</b><span>${esc(c.name)}</span>`,
     },
   };
 
@@ -208,8 +135,6 @@
   }
   const combos = {};
   Object.assign(combos, {
-    carrier: combo('carrier', SOURCES.carrier),
-    flight: combo('flight', SOURCES.flight),
     origin: combo('origin', SOURCES.airport),
     dest: combo('dest', SOURCES.airport),
   });
@@ -222,18 +147,14 @@
 
   function readForm() {
     return {
-      carrier: combos.carrier.resolve(),
-      flight: combos.flight.resolve(),
+      ...TYPICAL,
       origin: combos.origin.resolve(),
       dest: combos.dest.resolve(),
       date: $('f-date').value,
-      time: $('f-time').value || '09:00',
     };
   }
 
   function validate(f) {
-    if (!f.carrier) return ['f-carrier-q', 'Pick your airline. Search by name or code, like United or UA.'];
-    if (!f.flight) return ['f-flight-q', 'Enter the flight number, or pick one from the list once From and To are set.'];
     if (!f.origin) return ['f-origin-q', 'Pick where you fly from. Search by city or airport code.'];
     if (!f.dest) return ['f-dest-q', 'Pick where you fly to. Search by city or airport code.'];
     if (f.origin === f.dest) return ['f-dest-q', 'Origin and destination are the same airport.'];
@@ -249,10 +170,7 @@
   ['f-origin-list', 'f-dest-list'].forEach((id) => $(id).addEventListener('mousedown', () => setTimeout(warmRoute, 0)));
 
   function setForm(f) {
-    combos.carrier.set(f.carrier);
-    combos.flight.set(f.flight);
     $('f-date').value = f.date;
-    $('f-time').value = f.time;
     combos.origin.set(f.origin);
     combos.dest.set(f.dest);
   }
@@ -273,12 +191,12 @@
   });
 
   const EXAMPLES = {
-    'ord-snow': { carrier: 'UA', flight: '1423', origin: 'ORD', dest: 'LGA', date: '2026-12-14', time: '07:05' },
-    'nyc-tstorm': { carrier: 'B6', flight: '617', origin: 'JFK', dest: 'BOS', date: '2026-12-14', time: '17:40' },
-    'den-wind': { carrier: 'WN', flight: '2214', origin: 'DEN', dest: 'DFW', date: '2026-11-03', time: '15:20' },
-    'fl-storm': { carrier: 'AA', flight: '1650', origin: 'MIA', dest: 'ATL', date: '2026-10-10', time: '11:15' },
-    'bos-noreaster': { carrier: 'DL', flight: '903', origin: 'BOS', dest: 'ATL', date: '2027-01-07', time: '06:30' },
-    shutdown: { carrier: 'UA', flight: '508', origin: 'EWR', dest: 'SFO', date: '2026-11-20', time: '18:45' },
+    'ord-snow': { ...TYPICAL, origin: 'ORD', dest: 'LGA', date: '2026-12-14' },
+    'nyc-tstorm': { ...TYPICAL, origin: 'JFK', dest: 'BOS', date: '2026-12-14' },
+    'den-wind': { ...TYPICAL, origin: 'DEN', dest: 'DFW', date: '2026-11-03' },
+    'fl-storm': { ...TYPICAL, origin: 'MIA', dest: 'ATL', date: '2026-10-10' },
+    'bos-noreaster': { ...TYPICAL, origin: 'BOS', dest: 'ATL', date: '2027-01-07' },
+    shutdown: { ...TYPICAL, origin: 'EWR', dest: 'SFO', date: '2026-11-20' },
   };
   document.querySelectorAll('[data-example]').forEach((b) => {
     b.addEventListener('click', () => { setForm(EXAMPLES[b.dataset.example]); form.requestSubmit(); });
@@ -318,9 +236,9 @@
     if (window.FPLive && window.FPLive.on) {
       btn.disabled = true;
       btn.textContent = 'Checking Snowflake…';
-      await window.FPLive.prefetch(f);
+      await window.FPLive.route(f.origin, f.dest, f.date);
       btn.disabled = false;
-      btn.textContent = 'Check my flight';
+      btn.textContent = 'Check my route';
     }
     current = f;
     disabled.clear();
@@ -343,7 +261,7 @@
 
   // The answer as one big sentence, with the key facts as inline chips
   function statement(r, f) {
-    const o = byCode(D.airports, f.origin), d = byCode(D.airports, f.dest), c = byCode(D.carriers, f.carrier);
+    const o = byCode(D.airports, f.origin), d = byCode(D.airports, f.dest);
     const top = [...r.causes].sort((a, b) => b.p - a.p)[0];
     const typical = sumRates(D.globalRate);
     const vs = r.total / typical;
@@ -355,7 +273,7 @@
     else if (vs <= 0.85) compare = ['That’s below the', chip(fmtPct(typical), 'accent'), 'of a typical flight, mostly'];
     else compare = ['That’s about a typical flight', chip(fmtPct(typical), 'accent'), ', mostly'];
     const parts = [
-      `${c.name} ${f.flight} from`, chip(`<i class="pin"></i>${o.city} <em>${o.code}</em>`),
+      'A flight from', chip(`<i class="pin"></i>${o.city} <em>${o.code}</em>`),
       'to', chip(`<i class="pin"></i>${d.city} <em>${d.code}</em>`),
       'on', chip(day), 'has a', chip(fmtPct(r.total), 'ink'), 'chance of being cancelled.',
       ...compare,
@@ -377,8 +295,7 @@
     const money = Number($('f-money').value.replace(/[^\d.]/g, '')) || 0;
     const r = score(f, { disabled });
     const day = new Date(f.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    const time = new Date(`2000-01-01T${f.time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    $('r-flight').textContent = `${f.carrier} ${f.flight} · ${f.origin} → ${f.dest} · ${day} · ${time}`;
+    $('r-flight').textContent = `${f.origin} → ${f.dest} · ${day}`;
 
     const st = $('r-statement');
     st.innerHTML = statement(r, f);
@@ -449,59 +366,11 @@
           .join('')
       : `<p class="empty">No live markets cover this airport and date, so this is the historical rate for this flight.</p>`;
 
-    renderAlts(r);
-
     lastResult = r;
     // Re-rendered cards are already in view after a toggle; show them without replaying
     if (!opts.fresh) document.querySelectorAll('#results .reveal').forEach((el) => el.classList.add('in'));
   }
   let lastResult = null;
-
-  // Other departures on the same route and day, lowest cancel chance first
-  function renderAlts(r) {
-    const f = current;
-    const mine = r.total;
-    const alts = scheduleFor('', f.origin, f.dest)
-      .filter((x) => !(x.carrier === f.carrier && x.code === f.flight))
-      .map((x) => {
-        const alt = { carrier: x.carrier, flight: x.code, origin: f.origin, dest: f.dest, date: f.date, time: x.time };
-        return { ...alt, name: x.carrierName, p: score(alt, { disabled }).total };
-      })
-      .sort((a, b) => a.p - b.p)
-      .slice(0, 6);
-    const better = alts.filter((a) => a.p < mine * 0.95).length;
-    $('r-alts-sub').textContent = alts.length
-      ? `Same day, same route, ranked by cancel chance. ${better ? `${better} ${better === 1 ? 'is' : 'are'} safer than yours.` : 'Yours is already one of the safest.'}`
-      : 'No other departures found on this route that day.';
-    const max = Math.max(mine, ...alts.map((a) => a.p)) * 1.1;
-    const row = (a, k, isMine) => {
-      const diff = (a.p - mine) * 100;
-      const delta = isMine ? '<span class="alt-delta mine">Your flight</span>'
-        : `<span class="alt-delta ${diff < 0 ? 'down' : 'up'}">${diff < 0 ? '▼' : '▲'} ${Math.abs(diff).toFixed(diff > -1 && diff < 1 ? 2 : 1)} pts</span>`;
-      return `<li class="alt${isMine ? ' is-mine' : ''}" style="--i:${k}">
-        <span class="alt-time">${fmtTime(a.time)}</span>
-        <span class="alt-flight"><b>${a.carrier} ${a.flight}</b><span class="soft small">${esc(a.name)}</span></span>
-        <span class="alt-bar"><i style="--w:${(a.p / max) * 100}%"></i></span>
-        <b class="alt-p">${fmtPct(a.p)}</b>
-        ${delta}
-        ${isMine ? '<span></span>' : `<button class="btn btn-ghost btn-sm" type="button" data-alt="${k}">Check</button>`}
-      </li>`;
-    };
-    // Your flight sits in the list at its rank so the comparison is obvious
-    const mineRow = { carrier: f.carrier, flight: f.flight, time: f.time, name: byCode(D.carriers, f.carrier).name, p: mine };
-    const list = [...alts.map((a, k) => ({ a, k })), { a: mineRow, k: -1 }].sort((x, y) => x.a.p - y.a.p);
-    $('r-alts').innerHTML = list.map(({ a, k }) => row(a, k, k === -1)).join('');
-    altData = alts;
-  }
-  let altData = [];
-  $('r-alts').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-alt]');
-    if (!b) return;
-    const a = altData[Number(b.dataset.alt)];
-    const f = { carrier: a.carrier, flight: a.flight, origin: a.origin, dest: a.dest, date: a.date, time: a.time };
-    setForm(f);
-    check(f);
-  });
 
   $('r-markets').addEventListener('change', (e) => {
     const id = e.target.dataset.id;
@@ -539,9 +408,9 @@
     watch.days = days;
     watch.hist = m.history;
     watch.series = m.history.map((q) => score(current, { disabled, qOverride: { [m.id]: q } }).total);
-    $('tl-title').textContent = `${current.carrier} ${current.flight} · ${current.origin} → ${current.dest}`;
+    $('tl-title').textContent = `${current.origin} → ${current.dest}`;
     $('tl-market-label').textContent = m.title;
-    $('tl-base').textContent = `${current.carrier} ${current.origin}→${current.dest} · ${r.band} departures · ${fmtPct(r.baseTotal)}`;
+    $('tl-base').textContent = `${current.origin}→${current.dest} · ${r.band} departures · ${fmtPct(r.baseTotal)}`;
 
     const W = 1000, H = 60;
     const draw = (svg, vals) => {
@@ -657,17 +526,21 @@
     const inState = (st) => D.airports.filter((a) => a.state === st).sort((a, z) => z.hub - a.hub)[0];
     const from = m.scope.national ? 'ATL' : byCode(D.airports, m.scope.airports[0]) ? m.scope.airports[0] : (inState(m.scope.airports[0]) || {}).code;
     const today = new Date().toISOString().slice(0, 10);
-    setForm({ carrier: '', flight: '', origin: from || '', dest: '', date: m.dates[0] < today ? today : m.dates[0], time: '09:00' });
+    setForm({ origin: from || '', dest: '', date: m.dates[0] < today ? today : m.dates[0] });
     window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
     setTimeout(() => $('f-dest-q').focus(), reduceMotion ? 0 : 500);
   });
 
-  // A flight in the URL (from the daily game, or a shared link) is checked straight away
+  // A route in the URL (from a shared link) is checked straight away
   (function fromUrl() {
     const p = new URLSearchParams(location.search);
-    const f = Object.fromEntries(['carrier', 'flight', 'origin', 'dest', 'date', 'time'].map((k) => [k, p.get(k) || '']));
-    if (!f.time) f.time = '09:00';
-    if (validate(f) || !byCode(D.carriers, f.carrier) || !byCode(D.airports, f.origin) || !byCode(D.airports, f.dest)) return;
+    const f = {
+      ...TYPICAL,
+      origin: (p.get('origin') || '').toUpperCase(),
+      dest: (p.get('dest') || '').toUpperCase(),
+      date: p.get('date') || '',
+    };
+    if (validate(f) || !byCode(D.airports, f.origin) || !byCode(D.airports, f.dest)) return;
     setForm(f);
     check(f);
   })();
@@ -688,6 +561,6 @@
   window.FPPlane && window.FPPlane.mountHero($('hero-canvas'), tags);
   // Tag order matches the charms: orange, blue, green
   [EXAMPLES['fl-storm'], EXAMPLES['ord-snow'], EXAMPLES['den-wind']].forEach((f, i) => {
-    tags[i].textContent = `${f.carrier} ${f.flight} · ${fmtPct(score(f).total)}`;
+    tags[i].textContent = `${f.origin} → ${f.dest} · ${fmtPct(score(f).total)}`;
   });
 })();

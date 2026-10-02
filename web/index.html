@@ -16,11 +16,11 @@
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M2.5 13.5 21 6.5c.8-.3 1.4.6.8 1.2L12 17l-2.2 4.3c-.3.6-1.2.5-1.3-.2L7.8 16l-5.1-1.3c-.6-.2-.7-1-.2-1.2Z" fill="currentColor"/></svg>
       FlightPredictor
     </a>
-    <p class="nav-flight" hidden><span class="kicker">Your flight</span> <b id="r-flight"></b></p>
+    <p class="nav-flight" hidden><span class="kicker">Your route</span> <b id="r-flight"></b></p>
     <div class="nav-actions">
       <span class="data-badge" id="data-badge" hidden></span>
       <a class="btn btn-ghost btn-sm" href="game.html">Daily game</a>
-      <a class="btn btn-dark btn-sm" href="#top" id="nav-new" hidden>Edit flight</a>
+      <a class="btn btn-dark btn-sm" href="#top" id="nav-new" hidden>Edit route</a>
     </div>
   </header>
 
@@ -37,23 +37,9 @@
 
       <h1>Will my flight get cancelled?</h1>
       <div class="hero-copy">
-        <p class="lede">Enter your flight to get the odds, what's driving them, and how they're moving with live weather markets.</p>
+        <p class="lede">Enter your route to get the odds, what's driving them, and how they're moving with live weather markets.</p>
 
         <form class="card ask" id="flight-form" autocomplete="off" novalidate>
-          <div class="field-row">
-            <div class="field grow combo">
-              <label for="f-carrier-q">Airline</label>
-              <input id="f-carrier-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-carrier-list" placeholder="Airline name or code" spellcheck="false">
-              <input type="hidden" id="f-carrier" name="carrier">
-              <ul class="combo-list" id="f-carrier-list" role="listbox" hidden></ul>
-            </div>
-            <div class="field w-flight combo">
-              <label for="f-flight-q">Flight number</label>
-              <input id="f-flight-q" type="text" inputmode="numeric" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-flight-list" placeholder="Type or pick" spellcheck="false">
-              <input type="hidden" id="f-flight" name="flight">
-              <ul class="combo-list" id="f-flight-list" role="listbox" hidden></ul>
-            </div>
-          </div>
           <div class="field-row">
             <div class="field grow combo" data-for="origin">
               <label for="f-origin-q">From</label>
@@ -74,18 +60,14 @@
               <span>Date</span>
               <input type="date" name="date" id="f-date" min="2026-10-02" max="2027-10-02" required>
             </label>
-            <label class="field grow">
-              <span>Departure time</span>
-              <input type="time" name="time" id="f-time" value="09:00" step="300" required>
-            </label>
           </div>
           <p class="form-error" id="f-error" role="alert" hidden></p>
-          <button class="btn btn-dark btn-block" type="submit">Check my flight</button>
+          <button class="btn btn-dark btn-block" type="submit">Check my route</button>
           <div class="examples">
             <span class="muted small">Or try one:</span>
-            <button type="button" class="chip" data-example="ord-snow">UA 1423 · ORD → LGA · snow</button>
-            <button type="button" class="chip" data-example="den-wind">WN 2214 · DEN → DFW · wind</button>
-            <button type="button" class="chip" data-example="fl-storm">AA 1650 · MIA → ATL · storm</button>
+            <button type="button" class="chip" data-example="ord-snow">ORD → LGA · snow</button>
+            <button type="button" class="chip" data-example="den-wind">DEN → DFW · wind</button>
+            <button type="button" class="chip" data-example="fl-storm">MIA → ATL · storm</button>
           </div>
         </form>
       </div>
@@ -102,7 +84,7 @@
           <div class="answer-num reveal">
             <p class="verdict" id="r-verdict"></p>
             <div class="hero-num"><span id="r-p"></span><small>%</small></div>
-            <p class="soft">chance this flight is cancelled</p>
+            <p class="soft">chance a flight on this route is cancelled</p>
           </div>
           <div class="answer-meta reveal">
             <div class="ci" aria-hidden="true">
@@ -110,7 +92,7 @@
               <div class="ci-axis"><span>0%</span><span class="ci-key"><i class="k-band"></i>90% range <i class="k-base"></i>typical</span><span id="r-ci-max"></span></div>
             </div>
             <div class="stats">
-              <div class="stat"><span class="soft">Typical for this flight</span><b id="r-base"></b></div>
+              <div class="stat"><span class="soft">Typical for this route</span><b id="r-base"></b></div>
               <div class="stat"><span class="soft">90% range</span><b id="r-ci"></b></div>
               <label class="stat">
                 <span class="soft">Trip cost</span>
@@ -167,16 +149,6 @@
             <div class="playhead" id="tl-playhead" role="slider" tabindex="0" aria-label="Days before departure" aria-valuemin="0" aria-valuemax="14"><span></span></div>
           </div>
         </div>
-      </section>
-
-      <!-- Lower-risk options on the same route and day -->
-      <section class="r-alts" aria-labelledby="r-alts-title">
-        <div class="r-head reveal">
-          <p class="kicker">Options</p>
-          <h2 id="r-alts-title">Safer flights on this route.</h2>
-          <p class="soft" id="r-alts-sub">Same day, same route, ranked by cancel chance.</p>
-        </div>
-        <ol class="alt-list reveal" id="r-alts"></ol>
       </section>
 
       <!-- Other markets, as a gallery -->
