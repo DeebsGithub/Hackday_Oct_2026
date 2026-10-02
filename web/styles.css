@@ -88,6 +88,7 @@ h1, h2, h3 { margin: 0; letter-spacing: -0.035em; line-height: 0.98; font-weight
 body.can-grab, body.can-grab .hero { cursor: grab; }
 body.grabbing, body.grabbing * { cursor: grabbing !important; user-select: none; }
 .charm-tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.charm-tag:empty { display: none; }
 .charm-tag {
   position: absolute; left: 0; top: 0; white-space: nowrap;
   padding: 5px 10px; border-radius: 999px; background: var(--ink); color: var(--paper);

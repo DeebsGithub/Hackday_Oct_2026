@@ -32,8 +32,7 @@ def load_database(request: FlightRequest):
     sql_req = f"""
     SELECT
     GATE_DEPARTURE_DELAY,
-    IS_CANCELLED,
-    SCHEDULED_GATE_DEPARTURE_LOCAL,
+    IS_CANCELLED
     FROM FLIGHTS
     WHERE DEPARTURE_AIRPORT_ID = '{request.departing_airport}'
     AND ARRIVAL_AIRPORT_ID = '{request.arriving_airport}';
