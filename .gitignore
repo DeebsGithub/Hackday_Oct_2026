@@ -1,6 +1,3 @@
-# Backend stays local
-backend/
-
 # Secrets and local config
 .env
 .env.*
