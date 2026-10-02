@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FlightPredictor</title>
+  <meta name="description" content="Calibrated cancellation odds for any US domestic flight, split by cause and moved by live weather markets.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="FlightPredictor home">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M2.5 13.5 21 6.5c.8-.3 1.4.6.8 1.2L12 17l-2.2 4.3c-.3.6-1.2.5-1.3-.2L7.8 16l-5.1-1.3c-.6-.2-.7-1-.2-1.2Z" fill="currentColor"/></svg>
+      FlightPredictor
+    </a>
+    <p class="nav-flight" hidden><span class="kicker">Your flight</span> <b id="r-flight"></b></p>
+    <div class="nav-actions">
+      <span class="data-badge" id="data-badge" hidden></span>
+      <a class="btn btn-ghost btn-sm" href="game.html">Daily game</a>
+      <a class="btn btn-dark btn-sm" href="#top" id="nav-new" hidden>Edit flight</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- STEP 1: ask -->
+    <section class="hero">
+      <div class="hero-stage">
+        <canvas id="hero-canvas" aria-label="Three glossy toy airplanes hanging from one keyring. Drag a plane to swing it."></canvas>
+        <div class="charm-tags" aria-hidden="true">
+          <span class="charm-tag"></span><span class="charm-tag"></span><span class="charm-tag"></span>
+        </div>
+        <p class="stage-hint">Grab a plane and swing it</p>
+      </div>
+
+      <h1>Will my flight get cancelled?</h1>
+      <div class="hero-copy">
+        <p class="lede">Enter your flight to get the odds, what's driving them, and how they're moving with live weather markets.</p>
+
+        <form class="card ask" id="flight-form" autocomplete="off" novalidate>
+          <div class="field-row">
+            <div class="field grow combo">
+              <label for="f-carrier-q">Airline</label>
+              <input id="f-carrier-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-carrier-list" placeholder="Airline name or code" spellcheck="false">
+              <input type="hidden" id="f-carrier" name="carrier">
+              <ul class="combo-list" id="f-carrier-list" role="listbox" hidden></ul>
+            </div>
+            <div class="field w-flight combo">
+              <label for="f-flight-q">Flight number</label>
+              <input id="f-flight-q" type="text" inputmode="numeric" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-flight-list" placeholder="Type or pick" spellcheck="false">
+              <input type="hidden" id="f-flight" name="flight">
+              <ul class="combo-list" id="f-flight-list" role="listbox" hidden></ul>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field grow combo" data-for="origin">
+              <label for="f-origin-q">From</label>
+              <input id="f-origin-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-origin-list" placeholder="City or code" spellcheck="false">
+              <input type="hidden" id="f-origin" name="origin">
+              <ul class="combo-list" id="f-origin-list" role="listbox" hidden></ul>
+            </div>
+            <button type="button" class="swap" id="f-swap" aria-label="Swap origin and destination">⇄</button>
+            <div class="field grow combo" data-for="dest">
+              <label for="f-dest-q">To</label>
+              <input id="f-dest-q" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="f-dest-list" placeholder="City or code" spellcheck="false">
+              <input type="hidden" id="f-dest" name="dest">
+              <ul class="combo-list" id="f-dest-list" role="listbox" hidden></ul>
+            </div>
+          </div>
+          <div class="field-row">
+            <label class="field grow">
+              <span>Date</span>
+              <input type="date" name="date" id="f-date" min="2026-10-02" max="2027-10-02" required>
+            </label>
+            <label class="field grow">
+              <span>Departure time</span>
+              <input type="time" name="time" id="f-time" value="09:00" step="300" required>
+            </label>
+          </div>
+          <p class="form-error" id="f-error" role="alert" hidden></p>
+          <button class="btn btn-dark btn-block" type="submit">Check my flight</button>
+          <div class="examples">
+            <span class="muted small">Or try one:</span>
+            <button type="button" class="chip" data-example="ord-snow">UA 1423 · ORD → LGA · snow</button>
+            <button type="button" class="chip" data-example="den-wind">WN 2214 · DEN → DFW · wind</button>
+            <button type="button" class="chip" data-example="fl-storm">AA 1650 · MIA → ATL · storm</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- STEP 2: answer and detail -->
+    <div id="results" hidden>
+
+      <!-- The answer, as one big sentence -->
+      <section class="panel r-statement" aria-labelledby="r-statement">
+        <p class="kicker">Your forecast</p>
+        <h2 class="statement" id="r-statement"></h2>
+        <div class="answer-row">
+          <div class="answer-num reveal">
+            <p class="verdict" id="r-verdict"></p>
+            <div class="hero-num"><span id="r-p"></span><small>%</small></div>
+            <p class="soft">chance this flight is cancelled</p>
+          </div>
+          <div class="answer-meta reveal">
+            <div class="ci" aria-hidden="true">
+              <div class="ci-track"><div class="ci-band" id="r-ci-band"></div><div class="ci-mark ci-base" id="r-ci-base"></div><div class="ci-mark" id="r-ci-mark"></div></div>
+              <div class="ci-axis"><span>0%</span><span class="ci-key"><i class="k-band"></i>90% range <i class="k-base"></i>typical</span><span id="r-ci-max"></span></div>
+            </div>
+            <div class="stats">
+              <div class="stat"><span class="soft">Typical for this flight</span><b id="r-base"></b></div>
+              <div class="stat"><span class="soft">90% range</span><b id="r-ci"></b></div>
+              <label class="stat">
+                <span class="soft">Trip cost</span>
+                <span class="money"><span>$</span><input id="f-money" inputmode="numeric" value="640" aria-label="Trip cost in dollars"></span>
+              </label>
+              <div class="stat"><span class="soft">Expected loss</span><b id="r-exp"></b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Every outcome, numbered cards -->
+      <section class="r-causes" id="outcomes" aria-labelledby="r-causes-title">
+        <div class="r-head reveal">
+          <p class="kicker">By cause</p>
+          <h2 id="r-causes-title">Five ways it can go.</h2>
+          <p class="soft">Each cancel cause gets its own estimate. Together with flying on time, they add up to 100%.</p>
+        </div>
+        <div class="stack reveal" id="r-stack" role="img"></div>
+        <ol class="cause-cards" id="r-legend"></ol>
+        <div class="tooltip" id="tip" role="tooltip" hidden></div>
+      </section>
+
+      <!-- Live markets -->
+      <section class="panel dark r-movers" aria-labelledby="r-movers-title">
+        <div class="r-head reveal">
+          <p class="kicker">Live markets</p>
+          <h2 id="r-movers-title">What's moving your odds.</h2>
+          <p class="soft">Markets that cover this airport and date. Switch one off to see the odds without it.</p>
+        </div>
+        <div id="r-markets" class="reveal"></div>
+      </section>
+
+      <!-- Trip Watch timeline -->
+      <section class="r-watch" id="watch" aria-labelledby="r-watch-title">
+        <div class="r-head reveal">
+          <p class="kicker">Trip Watch</p>
+          <h2 id="r-watch-title">Scrub the last two weeks.</h2>
+          <p class="soft">The typical rate holds still. The market moves. Drag across the timeline to see your odds on any day.</p>
+        </div>
+        <div class="editor reveal">
+          <div class="editor-bar">
+            <span class="rec"></span>
+            <b id="tl-title"></b>
+            <span class="spacer"></span>
+            <span class="readout"><span class="soft" id="tl-day"></span> <b id="tl-p"></b></span>
+          </div>
+          <div class="tracks" id="tracks">
+            <div class="ruler" id="tl-ruler"></div>
+            <div class="track"><span class="track-label"><i class="tk tk-base"></i>Typical rate</span><div class="lane"><div class="clip clip-base" id="tl-base"></div></div></div>
+            <div class="track"><span class="track-label"><i class="tk tk-market"></i><span id="tl-market-label">Market</span></span><div class="lane"><div class="clip clip-market"><svg id="tl-spark" preserveAspectRatio="none"></svg></div></div></div>
+            <div class="track"><span class="track-label"><i class="tk tk-out"></i>Your odds</span><div class="lane"><div class="clip clip-out"><svg id="tl-out" preserveAspectRatio="none"></svg></div></div></div>
+            <div class="track"><span class="track-label"><i class="tk tk-alert"></i>Alerts</span><div class="lane" id="tl-alerts"></div></div>
+            <div class="playhead" id="tl-playhead" role="slider" tabindex="0" aria-label="Days before departure" aria-valuemin="0" aria-valuemax="14"><span></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lower-risk options on the same route and day -->
+      <section class="r-alts" aria-labelledby="r-alts-title">
+        <div class="r-head reveal">
+          <p class="kicker">Options</p>
+          <h2 id="r-alts-title">Safer flights on this route.</h2>
+          <p class="soft" id="r-alts-sub">Same day, same route, ranked by cancel chance.</p>
+        </div>
+        <ol class="alt-list reveal" id="r-alts"></ol>
+      </section>
+
+      <!-- Other markets, as a gallery -->
+      <section class="r-gallery" id="markets" aria-labelledby="r-gallery-title">
+        <div class="r-head reveal">
+          <p class="kicker">Weather markets</p>
+          <h2 id="r-gallery-title">Other markets we're watching.</h2>
+        </div>
+        <div class="market-rail" id="market-grid"></div>
+        <p class="fine">Sample data for the prototype. Markets below the liquidity floor are hidden; prices are smoothed over 6 hours.</p>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-big">Fly informed.</div>
+    <div class="footer-cols">
+      <div><b>Data</b><span>BTS on-time performance</span><span>NOAA weather</span><span>Prediction markets</span></div>
+      <div><b>Model</b><span>v1 · empirical Bayes</span><span>Prototype, sample data</span></div>
+    </div>
+  </footer>
+
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="airports.js"></script>
+  <script src="data.js"></script>
+  <script src="score.js"></script>
+  <script src="live.js"></script>
+  <script src="plane.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
