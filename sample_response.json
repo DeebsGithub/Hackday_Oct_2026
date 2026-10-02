@@ -1,0 +1,5 @@
+{
+	"base_percent_chance_delay": 0.05,
+	"predicted_weather": "sunny",
+	"updated_percent_chance_delay": 0.02,
+}
